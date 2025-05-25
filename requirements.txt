@@ -1,0 +1,25 @@
+# Core data & ML stack
+pandas>=2.2
+numpy>=1.26
+scikit-learn>=1.5
+xgboost>=2.0
+joblib>=1.3
+
+# Visualization & profiling
+matplotlib>=3.9
+seaborn>=0.13
+ydata-profiling>=4.7
+shap>=0.45
+
+# Data access helpers
+kagglehub>=0.2
+
+# API serving (future MLOps step)
+fastapi>=0.110
+uvicorn[standard]>=0.29
+
+# Jupyter (optional, for notebooks)
+jupyterlab>=4.2
+ipykernel>=6.29
+
+python-dateutil>=2.8

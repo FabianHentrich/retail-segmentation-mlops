@@ -43,6 +43,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from xgboost import XGBRegressor
 
+import matplotlib as plt
+import shap
+
 # Optional SHAP import is heavy – load lazily
 try:
     import shap  # noqa: F401
@@ -53,6 +56,7 @@ except ImportError:
 # -----------------------------------------------------------------------------
 # Helper functions
 # -----------------------------------------------------------------------------
+
 
 def build_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
     """Select & one‑hot‑encode features for the model.
@@ -150,13 +154,15 @@ def main():
     if args.shap:
         if not _HAS_SHAP:
             raise ImportError("shap is not installed. Run 'pip install shap' and retry.")
-        import shap
+
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(X_test)
-        shap.summary_plot(
-            shap_values, X_test, show=False, plot_size=(10, 6)
-        )
-        shap_path = Path(args.metrics_out).with_suffix("_shap.png")
+        shap.summary_plot(shap_values, X_test, show=False, plot_size=(10, 6))
+
+        # Pfad: <metrics_stem>_shap.png  (reports/xgb_metrics_shap.png)
+        metrics_path = Path(args.metrics_out)
+        shap_path = metrics_path.with_name(metrics_path.stem + "_shap.png")
+
         plt.gcf().savefig(shap_path, bbox_inches="tight")
         print("SHAP plot saved to", shap_path)
 
