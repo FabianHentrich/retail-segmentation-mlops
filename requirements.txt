@@ -1,25 +1,24 @@
-# Core data & ML stack
-pandas>=2.2
-numpy>=1.26
-scikit-learn>=1.5
-xgboost>=2.0
-joblib>=1.3
+# Core
+pandas>=1.5
+numpy>=1.23
+scikit-learn>=1.1
+xgboost>=1.7
+joblib>=1.2
 
-# Visualization & profiling
-matplotlib>=3.9
-seaborn>=0.13
-ydata-profiling>=4.7
-shap>=0.45
+# Hyperparameter Optimization
+optuna>=3.1
+plotly>=5.15
+matplotlib>=3.6
 
-# Data access helpers
-kagglehub>=0.2
+# Model Interpretability
+shap>=0.42
 
-# API serving (future MLOps step)
-fastapi>=0.110
-uvicorn[standard]>=0.29
+# API
+fastapi>=0.95
+uvicorn[standard]>=0.22
 
-# Jupyter (optional, for notebooks)
-jupyterlab>=4.2
-ipykernel>=6.29
+# Logging und CLI
+python-dotenv>=1.0
 
-python-dateutil>=2.8
+
+
