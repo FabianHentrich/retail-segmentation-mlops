@@ -34,6 +34,7 @@ import plotly.io as pio
 
 try:
     import shap
+
     _HAS_SHAP = True
 except ImportError:
     _HAS_SHAP = False
@@ -56,39 +57,89 @@ logging.basicConfig(
 
 def build_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Build feature matrix by selecting RFM features and encoding optional categoricals.
+    Constructs a feature matrix from a given DataFrame by selecting RFM (Recency, Frequency, Monetary) features
+    and optionally encoding categorical variables (Region, Segment, Cluster) if they are present.
 
     Parameters
     ----------
     df : pd.DataFrame
-        Input DataFrame with raw features.
+        Input DataFrame that contains raw customer-related features, including RFM and potentially categorical variables.
 
     Returns
     -------
     pd.DataFrame
-        Feature matrix (X) after encoding.
+        A DataFrame representing the final feature matrix `X`, where:
+        - RFM features are included, with 'Recency' log-transformed.
+        - Categorical variables are one-hot encoded (excluding the first category to avoid multicollinearity).
     """
     numeric_cols = ["Recency", "Frequency", "Monetary"]
     cat_cols = [col for col in ["Region", "Segment", "Cluster"] if col in df.columns]
     df_num = df[numeric_cols].copy()
+    df_num["Recency"] = np.log1p(df_num["Recency"])
     df_cat = pd.get_dummies(df[cat_cols], drop_first=True) if cat_cols else pd.DataFrame()
     return pd.concat([df_num, df_cat], axis=1)
 
 
-def train_model_with_optimized_params(X: pd.DataFrame, y: pd.Series, n_trials: int,valid_size: float, random_state: int ) -> XGBRegressor:
+def train_model_with_optimized_params(X: pd.DataFrame, y: pd.Series, n_trials: int, valid_size: float,
+                                      random_state: int) -> tuple[XGBRegressor, dict]:
+    """
+    Train an XGBoost regression model using Optuna to optimize hyperparameters.
+
+    This function performs hyperparameter tuning using Optuna's TPE sampler.
+    It evaluates each trial on a holdout validation set using RMSE as the metric.
+    After optimization, it fits the final model on the full dataset using the best parameters found.
+    Additionally, it generates and saves Optuna visualization reports.
+
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Feature matrix.
+    y : pd.Series
+        Target variable.
+    n_trials : int
+        Number of optimization trials to run.
+    valid_size : float
+        Proportion of the dataset to use for validation (between 0 and 1).
+    random_state : int
+        Random seed for reproducibility.
+
+    Returns
+    -------
+    model : XGBRegressor
+        Trained XGBoost regression model with optimized hyperparameters.
+    best_params : dict
+        Dictionary of the best hyperparameters found during optimization.
+    """
     def objective(trial: optuna.Trial) -> float:
+        """
+        Objective function for Optuna hyperparameter tuning.
+
+        The function trains and evaluates a model using parameters suggested by Optuna,
+        and returns the validation RMSE as the optimization target.
+
+        Parameters
+        ----------
+        trial : optuna.Trial
+            Current trial object for suggesting parameters.
+
+        Returns
+        -------
+        float
+            Root Mean Squared Error (RMSE) on the validation set.
+        """
         params = {
-            "n_estimators": trial.suggest_int("n_estimators", 100, 600),
-            "learning_rate": trial.suggest_float("learning_rate", 0.0001, 0.3, log=True),
-            "max_depth": trial.suggest_int("max_depth", 3, 6),
-            "min_child_weight": trial.suggest_int("min_child_weight", 3, 10),
-            "subsample": trial.suggest_float("subsample", 0.6, 0.9),
+            "learning_rate": trial.suggest_float("learning_rate", 0.01, 0.1, log=True),
+            "n_estimators": trial.suggest_int("n_estimators", 100, 300),
+            "max_depth": trial.suggest_int("max_depth", 2, 4),
+            "min_child_weight": trial.suggest_int("min_child_weight", 5, 20),
+            "subsample": trial.suggest_float("subsample", 0.5, 0.8),
             "colsample_bytree": trial.suggest_float("colsample_bytree", 0.5, 0.8),
-            "reg_lambda": trial.suggest_float("reg_lambda", 10.0, 15.0),
-            "reg_alpha": trial.suggest_float("reg_alpha", 0.0, 10.0),
+            "reg_lambda": trial.suggest_float("reg_lambda", 10.0, 30.0),
+            "reg_alpha": trial.suggest_float("reg_alpha", 1.0, 10.0),
             "random_state": random_state,
             "objective": "reg:squarederror",
         }
+
         X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=valid_size, random_state=random_state)
         model = XGBRegressor(**params)
         model.fit(X_train, y_train)
@@ -117,18 +168,29 @@ def train_model_with_optimized_params(X: pd.DataFrame, y: pd.Series, n_trials: i
 
 def evaluate(model, X_train, y_train, X_test, y_test):
     """
-    Evaluate model performance on train and test sets, and check for overfitting/underfitting.
+    Evaluate a regression model's performance on log training and log test data,
+    and check for potential overfitting or underfitting based on error margins.
 
     Parameters
     ----------
-    model : trained regressor
-    X_train, X_test : pd.DataFrame
-    y_train, y_test : pd.Series
+    model : fitted regressor object
+        A trained regression model that supports `.predict()`.
+
+    X_train : pd.DataFrame
+        Feature matrix for training data.
+    y_train : pd.Series
+        Target values for training data.
+    X_test : pd.DataFrame
+        Feature matrix for test data.
+    y_test : pd.Series
+        Target values for test data.
 
     Returns
     -------
     dict
-        Dictionary with train and test metrics and overfit/underfit flags.
+        Dictionary containing:
+        - Train and test metrics (MAE, RMSE, R²)
+        - Flags for overfitting and underfitting.
     """
 
     # Predictions
@@ -155,14 +217,14 @@ def evaluate(model, X_train, y_train, X_test, y_test):
 
     # Thresholds
     overfit = (
-        mae_gap > 0.15 * test_metrics["MAE"] or
-        rmse_gap > 0.15 * test_metrics["RMSE"] or
-        r2_gap > 0.05
+            mae_gap > 0.05 and  # 5% error margin log scale
+            rmse_gap > 0.10 and  # 10% error margin log scale
+            r2_gap > 0.03  # 3 pp difference
     )
 
     underfit = (
-        train_metrics["R2"] < 0.7 and
-        test_metrics["R2"] < 0.7
+            train_metrics["R2"] < 0.85 and
+            test_metrics["R2"] < 0.85
     )
 
     # Logging
@@ -185,24 +247,36 @@ def evaluate(model, X_train, y_train, X_test, y_test):
         "underfitting": underfit
     }
 
+
 def plot_learning_curve(model, X: pd.DataFrame, y: pd.Series, random_state: int = 42):
     """
-    Plot training and validation scores vs. training size.
+    Plot a learning curve showing how training and validation RMSE evolve with increasing training size.
+
+    This function uses 5-fold cross-validation to compute RMSE for different training set sizes
+    and plots both training and validation performance to diagnose learning behavior.
 
     Parameters
     ----------
     model : XGBRegressor
-        The estimator to evaluate.
+        The model instance (must implement fit and predict) to evaluate.
+
     X : pd.DataFrame
-        Full feature matrix.
+        Full feature matrix containing training features.
+
     y : pd.Series
         Target variable.
-    random_state : int
-        Random seed for KFold.
+
+    random_state : int, default=42
+        Random seed for reproducibility in cross-validation splits.
 
     Saves
     -----
-    - reports/learning_curve.png
+    - reports/learning_curve.png : PNG image of the learning curve plot.
+
+    Notes
+    -----
+    - Uses negative RMSE (neg_root_mean_squared_error) as scoring, so results are negated before plotting.
+    - Creates the 'reports/' folder if it doesn't exist.
     """
     train_sizes, train_scores, val_scores = learning_curve(
         estimator=model,
@@ -229,34 +303,85 @@ def plot_learning_curve(model, X: pd.DataFrame, y: pd.Series, random_state: int 
     plt.savefig("reports/learning_curve.png", bbox_inches="tight")
     logging.info("Learning curve saved to reports/learning_curve.png")
 
+
 def main():
+    """
+    Entry point for training an XGBoost regression model with Optuna hyperparameter optimization.
+
+    This script performs the following steps:
+    1. Parses command-line arguments.
+    2. Loads and preprocesses data.
+    3. Builds a feature matrix and log-transforms the target.
+    4. Splits the dataset into training and test sets.
+    5. Optimizes hyperparameters using Optuna and trains the model.
+    6. Evaluates model performance and detects overfitting/underfitting.
+    7. Saves the trained model and metrics to disk.
+    8. Optionally generates a SHAP feature importance summary plot.
+
+    Command-Line Arguments
+    ----------------------
+    --input : str (required)
+        Path to the CSV input file.
+    --target : str (default="Monetary")
+        Target column name for regression.
+    --test-size : float (default=0.2)
+        Proportion of the dataset to allocate to the test set.
+    --optuna-valid-size : float (default=0.4)
+        Validation set size for Optuna during hyperparameter tuning (from training split).
+    --random-state : int (default=42)
+        Random seed for reproducibility.
+    --n-trials : int (default=200)
+        Number of Optuna trials to run.
+    --model-out : str (default="models/xgb_model.pkl")
+        Path to save the trained model (includes column names).
+    --metrics-out : str (default="reports/xgb_metrics.json")
+        Path to save evaluation metrics as JSON.
+    --shap : flag
+        If set, generates a SHAP summary plot for model interpretability.
+
+    Notes
+    -----
+    - Log-transform is applied to the target variable for variance stabilization.
+    - Saves visualizations, metrics, and the final model in specified paths.
+    - Requires SHAP if --shap is enabled.
+    """
+    # Parse CLI arguments
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", type=str, required=True)
     parser.add_argument("--target", type=str, default="Monetary")
-    parser.add_argument("--test-size", type=float, default=0.4)
+    parser.add_argument("--test-size", type=float, default=0.2)
     parser.add_argument("--optuna-valid-size", type=float, default=0.4,
                         help="Validation size for Optuna optimization split")
     parser.add_argument("--random-state", type=int, default=42)
-    parser.add_argument("--n-trials", type=int, default=1000)
+    parser.add_argument("--n-trials", type=int, default=100)
     parser.add_argument("--model-out", type=str, default="models/xgb_model.pkl")
     parser.add_argument("--metrics-out", type=str, default="reports/xgb_metrics.json")
     parser.add_argument("--shap", action="store_true")
     args = parser.parse_args()
 
-
     logging.info("Starting XGBoost model training...")
     logging.info(f"Arguments: {args}")
 
+    # Load data
     df = pd.read_csv(args.input)
     if args.target not in df.columns:
         raise ValueError(f"Target column '{args.target}' not in dataframe.")
 
-    y = df[args.target]
+    # Target transformation
+    y = np.log1p(df[args.target])  # Log-transform target to stabilize variance
     X = build_feature_matrix(df)
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=args.test_size, random_state=args.random_state)
 
+    # Train/test split
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=args.test_size, random_state=args.random_state)
     logging.info(f"Training set size: {X_train.shape}, Test set size: {X_test.shape}")
-    model, best_params = train_model_with_optimized_params(X_train, y_train, args.n_trials, args.optuna_valid_size, args.random_state)
+
+    # Train model with Optuna
+    model, best_params = train_model_with_optimized_params(
+        X_train, y_train,
+        n_trials=args.n_trials,
+        valid_size=args.optuna_valid_size,
+        random_state=args.random_state
+    )
 
     # Evaluation metrics
     plot_learning_curve(model, X_train, y_train, random_state=args.random_state)
@@ -266,17 +391,21 @@ def main():
     logging.info(f"Final model parameters: {best_params}")
     Path(args.model_out).parent.mkdir(parents=True, exist_ok=True)
     joblib.dump((model, X_train.columns.tolist()), args.model_out)
+
+    logging.info(f"Model saved to {args.model_out}")
     Path(args.metrics_out).parent.mkdir(parents=True, exist_ok=True)
     with open(args.metrics_out, "w") as f:
         json.dump(metrics, f, indent=2)
 
-    #
+    # SHAP explainability (optional)
     if args.shap:
         if not _HAS_SHAP:
             logging.error("SHAP not available. Run 'pip install shap'")
             raise ImportError("Install SHAP: pip install shap")
+
         explainer = shap.TreeExplainer(model)
         shap_values = explainer.shap_values(X_test)
+
         shap.summary_plot(shap_values, X_test, show=False, plot_size=(10, 6))
         plt.gcf().savefig(Path(args.metrics_out).with_name("xgb_metrics_shap.png"))
         logging.info("SHAP summary plot saved.")

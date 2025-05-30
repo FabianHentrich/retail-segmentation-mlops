@@ -1,0 +1,13 @@
+2025-05-30 12:12:58,927 - INFO - Starting XGBoost model training...
+2025-05-30 12:12:58,927 - INFO - Arguments: Namespace(input='data/interim/rfm_clustered.csv', target='Monetary', test_size=0.2, optuna_valid_size=0.4, random_state=42, n_trials=200, model_out='models/xgb_model.pkl', metrics_out='reports/xgb_metrics.json', shap=True)
+2025-05-30 12:12:58,961 - INFO - Training set size: (634, 7), Test set size: (159, 7)
+2025-05-30 12:13:16,693 - INFO - Best parameters found: {'learning_rate': 0.1485787830276104, 'n_estimators': 270, 'max_depth': 5, 'min_child_weight': 2, 'subsample': 0.77560317475286, 'colsample_bytree': 0.9455781908981192, 'reg_lambda': 5.079550570008831, 'reg_alpha': 0.0009651766103993317}
+2025-05-30 12:13:16,776 - INFO - Saving Optuna visualizations...
+2025-05-30 12:13:26,495 - INFO - Learning curve saved to reports/learning_curve.png
+2025-05-30 12:13:26,505 - INFO - Train metrics: {'MAE': 0.007025018626099714, 'RMSE': 0.0100527522947379, 'R2': 0.9998990848474424}
+2025-05-30 12:13:26,505 - INFO - Test  metrics: {'MAE': 0.04397815640391284, 'RMSE': 0.18861153802336186, 'R2': 0.976325613693948}
+2025-05-30 12:13:26,505 - INFO - Overfitting detected: True
+2025-05-30 12:13:26,505 - INFO - Underfitting detected: False
+2025-05-30 12:13:26,505 - WARNING - ⚠️ Potential overfitting detected – train performance significantly better than test.
+2025-05-30 12:13:26,505 - INFO - Final model parameters: {'learning_rate': 0.1485787830276104, 'n_estimators': 270, 'max_depth': 5, 'min_child_weight': 2, 'subsample': 0.77560317475286, 'colsample_bytree': 0.9455781908981192, 'reg_lambda': 5.079550570008831, 'reg_alpha': 0.0009651766103993317}
+2025-05-30 12:13:26,866 - INFO - SHAP summary plot saved.

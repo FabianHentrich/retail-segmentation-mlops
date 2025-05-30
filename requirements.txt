@@ -4,6 +4,8 @@ numpy>=1.23
 scikit-learn>=1.1
 xgboost>=1.7
 joblib>=1.2
+pydantic~=2.10.3
+pathlib~=1.0.1
 
 # Hyperparameter Optimization
 optuna>=3.1
@@ -19,6 +21,5 @@ uvicorn[standard]>=0.22
 
 # Logging und CLI
 python-dotenv>=1.0
-
 
 
