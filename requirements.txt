@@ -22,4 +22,8 @@ uvicorn[standard]>=0.22
 # Logging und CLI
 python-dotenv>=1.0
 
+# Testing
+pytest>=7.0
+httpx>=0.24
+
 

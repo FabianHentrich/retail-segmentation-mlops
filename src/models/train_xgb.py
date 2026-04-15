@@ -25,7 +25,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split, learning_curve, KFold
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from xgboost import XGBRegressor
+from  xgboost import XGBRegressor
 import optuna
 from optuna.samplers import TPESampler
 import optuna.visualization as vis
